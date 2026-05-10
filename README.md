@@ -407,12 +407,11 @@ Para cada dirección, extraemos el selector y el offset, verificamos los límite
 2. VA: 0x1800, PA = 0x6000 + 0x800 = 0x6800
 3. VA: 0x3C00, es un segmento con crecimiento negativo PA = 0x2800 - 1024 = 0x2400
 4. VA: 0x0C00, Segmentation Fault (El offset excede el tamaño del segmento)
-5. 5. VA: 0x2200, Segmento no válido (No hay ninguna entrada en la tabla para el selector 10).
+5. VA: 0x2200, Segmento no válido (No hay ninguna entrada en la tabla para el selector 10).
 
 **2. ¿Por qué el Stack crece en dirección negativa? ¿Que ajuste especial requiere la formula al calcular el PA?**
 
 El stack crece en dirección negativa porque normalmente se ubica en la parte alta del espacio de direcciones virtuales y se expande hacia direcciones menores. Esto permite que el heap crezca hacia arriba y el stack crezca hacia abajo, aprovechando mejor el espacio entre ambos.
-
 
 **3. ¿Qué ventaja tiene la segmentación frente a base & bounds en cuanto a utilizacion de la memoria física?**
 
