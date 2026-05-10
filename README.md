@@ -397,26 +397,404 @@ La principal limitación de Base & Bounds es que requiere asignar a cada proceso
 ### 4. Segmentación
 
 #### 4.1 Traducción manual con tabla de segmentos
+
+![texto](IMG/4-1.png)
+
 **1. Muestre el cálculo paso a paso para cada VA.**
 
-
+Para cada dirección, extraemos el selector y el offset, verificamos los límites de tamaño y calculamos la Dirección Física (PA).
+1. VA: 0x03A0,  PA = Base + Offset = 0x4000 + 0x3A0 = 0x43A0
+2. VA: 0x1800, PA = 0x6000 + 0x800 = 0x6800
+3. VA: 0x3C00, es un segmento con crecimiento negativo PA = 0x2800 - 1024 = 0x2400
+4. VA: 0x0C00, Segmentation Fault (El offset excede el tamaño del segmento)
+5. 5. VA: 0x2200, Segmento no válido (No hay ninguna entrada en la tabla para el selector 10).
 
 **2. ¿Por qué el Stack crece en dirección negativa? ¿Que ajuste especial requiere la formula al calcular el PA?**
 
-
+El stack crece en dirección negativa porque normalmente se ubica en la parte alta del espacio de direcciones virtuales y se expande hacia direcciones menores. Esto permite que el heap crezca hacia arriba y el stack crezca hacia abajo, aprovechando mejor el espacio entre ambos.
 
 
 **3. ¿Qué ventaja tiene la segmentación frente a base & bounds en cuanto a utilizacion de la memoria física?**
 
-
-
+La segmentación permite dividir el espacio de direcciones en regiones lógicas independientes, lo que mejora la utilización de memoria frente a Base & Bounds. Sin embargo, puede generar fragmentación externa, ya que los segmentos tienen tamaños variables y pueden dejar huecos libres no contiguos en la memoria física.
 
 **4. ¿Qué es la fragmentación externa? ¿Por qué surge con segmentación? Ilustre con un diagrama de bloques de memoria**
 
 La fragmentación externa ocurre cuando la memoria libre total es suficiente, pero está dividida en varios huecos pequeños no contiguos. Entonces, una solicitud grande puede fallar porque no existe un bloque libre continuo suficientemente grande.
 
+### 5. Paginación
 
+#### 5.1 Cálculo de la tabla de páginas
 
+Teniendo en cuenta el sistema: 
 
+![texto](IMG/5-1.png)
 
+**1. ¿Cuantos bits se necesitan para el VPN y Cuantos para el offset? Muestre el cálculo.**
 
+Offset: Como el tamaño de página es 4 KB = 2^(12) bytes, se necesitan 12 bits para direccionar cada byte dentro de una página.
+
+VPN: Se obtiene restando los bits del offset al total del espacio virtual: VPN = Espacio virtual} - Offset
+
+**2. ¿Cuaantas entradas tiene la tabla de páginas de un proceso?**
+El número de entradas está determinado por la cantidad de páginas posibles, lo cual depende de los bits del VPN: Entradas = 2^{VPN bits}
+
+**3. ¿Cuanta memoria ocupa la tabla de paginas completa? ¿Es razonable ese tamaño para cada proceso?
+
+Para hallar el tamaño total, multiplicamos el número de entradas por el tamaño de cada entrada (PTE):
+
+```
+Tamaño de tabla = Número de entradas x Tamaño de PTE
+// Tamaño de tabla = 2^20 * 4 bytes = 4 MB
+```
+
+No es razonable para este sistema en particular. Según los datos, el espacio físico total es de solo 1 MB (20 bits). Una tabla de páginas de 4 MB para un solo proceso es cuatro veces más grande que toda la memoria RAM disponible, lo qque es imposible ejecutar incluso un único proceso bajo este esquema de tabla de páginasç.
+
+**4. ¿Cuantos bits necesita el PFN dentro de la PTE? ¿Que información almacenan los bits restantes? Mencione al menos 3 bits de control y su función**
+
+El PFN (Physical Frame Number) identifica el marco físico en la memoria RAM. Se calcula restando el offset al espacio físico total:
+
+```
+PFN bits = Espacio físico - Offset
+```
+
+Información de los bits restantes: Cada PTE tiene 4 bytes (32 bits). Si el PFN usa 8 bits, sobran 24 bits (32 - 8 = 24). Estos se utilizan para bits de control que gestionan la seguridad y el estado de la página.
+
+3 Bits de control y su función:
+- Present/Valid Bit: Indica si la página se encuentra actualmente en la memoria física (RAM) o si debe buscarse en el disco (generando un page fault).
+- Read/Write Bit: Determina los permisos de la página
+- Dirty Bit: Se activa cuando el contenido de la página ha sido modificado.
+
+#### 5.2  Simulador de paginación
+
+Vamos a crear paging_sim.c
+
+```c
+// paging_sim.c
+#include <stdio.h>
+
+#define PAGE_BITS 4
+#define PAGE_SIZE (1 << PAGE_BITS)              /* 16 bytes/pagina */
+#define VA_BITS 8                               /* VA de 8 bits */
+#define NUM_PAGES (1 << (VA_BITS - PAGE_BITS))  /* 16 paginas */
+
+/* Tabla de paginas: -1 = pagina no presente (PAGE FAULT) */
+int page_table[NUM_PAGES] = {
+    3, -1, 7, 2, -1, 1, -1, 5,
+    -1, -1, 4, -1, 6, -1, 0, -1
+};
+
+void traducir(int va) {
+    int vpn = va >> PAGE_BITS;
+    int offset = va & (PAGE_SIZE - 1);
+
+    printf("VA=0x%02X VPN=%2d Offset=%2d ", va, vpn, offset);
+
+    if (page_table[vpn] == -1) {
+        printf("-> PAGE FAULT (pagina no presente)\n");
+    } else {
+        int pfn = page_table[vpn];
+        int pa = (pfn << PAGE_BITS) | offset;
+        printf("-> PFN=%2d PA=0x%02X\n", pfn, pa);
+    }
+}
+
+int main() {
+    int vas[] = {0x00, 0x0F, 0x20, 0x35, 0x10, 0xA3, 0xC8, 0xF0};
+    int n = sizeof(vas) / sizeof(vas[0]);
+
+    printf("%-22s %-6s %-8s %-6s %s\n",
+           "VA", "VPN", "Offset", "PFN", "PA");
+    printf("-----------------------------------------------------\n");
+
+    for (int i = 0; i < n; i++) {
+        traducir(vas[i]);
+    }
+
+    return 0;
+}
+```
+
+#### 5.3 Simulador — Análisis
+
+**1. Compile y ejecute el simulador. Muestre la salida completa.**
+
+![texto](IMG/5-2.png)
+
+**2. ¿Que ocurre con las VAs 0x10 y 0xA3? ¿Que debería hacer el SO real ante un page fault?**
+
+Lo que ocurre con estas direcciones demuestra la diferencia entre un mapeo exitoso y un fallo de página:
+- VA 0x10 (16 en decimal): Al desplazar 4 bits a la derecha ($0x10 >> 4$), obtenemos un VPN = 1.
+  Al consultar la tabla de páginas, el valor almacenado es -1. Donde el sistema detecta que la página no está cargada en la memoria física, con generar un Page Fault.
+- VA 0xA3 (163 en decimal): El VPN es 10. El Offset es 3 (0x3 en hexadecimal)
+  Al consultar, encontramos el PFN = 4. y con el cálculo de la PA, se toma el PFN (4) y se concatena con el offset (3), resultando en la dirección física 0x43. Siendo la traducción exitosa.
+
+En un sistema operativo real, cuando ocurre un page fault, el procesador genera una excepción y transfiere el control al sistema operativo. El SO revisa si el acceso es válido. Si es válido, carga la página desde disco o desde memoria secundaria hacia un marco físico, actualiza la tabla de páginas y reintenta la instrucción. Si el acceso no es válido, termina el proceso, normalmente con un error de segmentación.
+
+**3. ¿Cuantos accesos a memoria física requiere completar una instrucción load con tabla de paginas de un solo nivel? ¿Por que es costoso y que solución de hardware existe?**
+
+Sin TLB, una instrucción load requiere normalmente dos accesos a memoria física: un acceso para leer la entrada de la tabla de páginas y un acceso para leer el dato real en memoria física. Es decir 2 accesos. Esto es costoso porque cada acceso a memoria virtual requiere primero consultar la tabla de páginas. En otras palabras, la traducción de direcciones agrega un acceso extra a memoria antes de poder leer el dato.
+
+La solución de hardware es el TLB (Translation Lookaside Buffer). El TLB es una caché de traducciones recientes VPN -> PFN. Si la traducción está en el TLB, no es necesario consultar la tabla de páginas en memoria, reduciendo el costo de traducción.
+
+**4. ¿Que ventaja tiene la paginación sobre la segmentación en cuanto al fenomeno de fragmentación?**
+
+La paginación evita la fragmentación externa, porque divide tanto la memoria virtual como la memoria física en bloques de tamaño fijo
+
+### 6. Gestión de espacio libre 
+
+#### 6.1 Simulación de estrategias de asignación
+
+Tenemos la siguiente lista libre: 
+
+![texto](IMG/6-1.png)
+
+**1. Para cada solicitud indique que bloque asigna first fit. Muestre la lista libre resultante tras las 4 asignaciones.**
+
+| Solicitud     | Bloque Seleccionado | Cálculo / Residuo                          |
+|---------------|---------------------|--------------------------------------------|
+| malloc(212)   | 0x0200 (500)        | Quedan 288 bytes en 0x02D4                 |
+| malloc(417)   | 0x0700 (600)        | Quedan 183 bytes en 0x08A1                 |
+| malloc(98)    | 0x0100 (100)        | Quedan 2 bytes en 0x0162                   |
+| malloc(426)   | NINGUNO             | No hay bloques ≥ 426. **FALLA.**           |
+
+Lista libre resultante (First Fit):
+- 0x0162 (2 bytes)
+- 0x02D4 (288 bytes)
+- 0x0400 (200 bytes)
+- 0x0500 (300 bytes)
+- 0x08A1 (183 bytes)
+
+**2. Repita con best fit. ¿Cambia el resultado?**
+
+| Solicitud     | Bloque Seleccionado | Residuo                          |
+|---------------|---------------------|----------------------------------|
+| malloc(212)   | 0x0500 (300)        | Quedan 88 bytes en 0x05D4        |
+| malloc(417)   | 0x0200 (500)        | Quedan 83 bytes en 0x03A1        |
+| malloc(98)    | 0x0100 (100)        | Quedan 2 bytes en 0x0162         |
+| malloc(426)   | 0x0700 (600)        | Quedan 174 bytes en 0x08AA       |
+
+El resultado es distinto. con Best Fit logró completar las 4 asignaciones con éxito.
+
+**3. ¿Cuál estrategia genera mas fragmentación externa en este caso? ¿Cuál la minimiza?**
+
+Estrategia con mas fragmentación: First Fit. 
+Estrategia que la minimiza: Best Fit. 
+
+**4. ¿Qué es el coalescing? Ilustre un caso donde su ausencia provoca que una solicitud de 250 bytes falle aunque haya suficiente memoria total libre.**
+
+El coalescing (coalescencia) es la técnica de fusionar bloques de memoria libre contiguos para formar un único bloque más grande. Sin esto, la memoria se fragmenta en pedazos pequeños inútiles.
+
+Caso de falla (sin coalescing): Imagina que tienes dos bloques libres adyacentes:
+- Bloque A: 150 bytes.
+- Bloque B: 150 bytes.
+- Total memoria libre: 300 bytes.
+
+Si llega un malloc(250), la solicitud fallará porque ningún bloque individual es suficiente, a pesar de que hay 300 bytes libres en total. Si existiera coalescing, se unirían en un solo bloque de 300 y la solicitud tendría éxito.
+
+**5. ¿Que es la fragmentación interna? ¿Cuando aparece tipicamente al usar un slab allocator?**
+
+La fragmentación interna ocurre cuando se asigna a un proceso un bloque de memoria ligeramente más grande de lo que solicitó. El espacio sobrante dentro de ese bloque asignado se desperdicia porque no puede ser usado por nadie más.
+
+En un Slab Allocator, aparece típicamente porque este asignador maneja "cachés" de objetos de tamaño fijo (slabs de 32 bytes, 64 bytes, 128 bytes).
+
+#### 6.2 Fragmentación
+
+Vamos a crear el archivo fragmentation.c
+
+```c
+// fragmentation.c
+#include <stdio.h>
+#include <stdlib.h>
+
+#define N 10
+
+int main() {
+    void *ptrs[N];
+    int sizes[] = {16, 32, 64, 128, 256, 512, 1024, 512, 256, 128};
+
+    /* Asignar N bloques de tamanos variados */
+    for (int i = 0; i < N; i++) {
+        ptrs[i] = malloc(sizes[i]);
+        printf("malloc(%4d) -> %p\n", sizes[i], ptrs[i]);
+    }
+
+    /* Liberar indices pares para crear huecos */
+    printf("\nLiberando bloques en indices pares...\n");
+
+    for (int i = 0; i < N; i += 2) {
+        free(ptrs[i]);
+        ptrs[i] = NULL;
+    }
+
+    /* Intentar asignar un bloque grande */
+    void *big = malloc(1500);
+
+    printf("\nmalloc(1500) -> %p [%s]\n",
+           big, big ? "exito" : "FALLO");
+
+    if (big) {
+        free(big);
+    }
+
+    for (int i = 1; i < N; i += 2) {
+        free(ptrs[i]);
+    }
+
+    return 0;
+}
+```
+
+y compilamos:
+
+![texto](IMG/6-2.png)
+
+#### 6.3 Fragmentación en glibc — Análisis
+
+**1. ¿Son consecutivas en memoria las direcciones asignadas? ¿Que patrón de separación observa entre bloques contiguos?**
+
+¿Son consecutivas? No estrictamente ya que las direcciones son crecientes, existe una diferencia mayor al tamaño solicitado entre cada puntero. Siendo su patrón de separación entre malloc(32) y malloc(64), la diferencia es de 0x30 ($48$ bytes).
+
+**2. ¿Tiene exito la asignación final de 1500 bytes? Explique el resultado en términos de fragmentación.?**
+
+Si, tuvo exito. Aunque se libero los índices pares (0, 2, 4, 6 y 8), la suma de esa memoria liberada ($16 + 64 + 256 + 1024 + 256 = 1616$ bytes) no está disponible como un único bloque contiguo. Los bloques de los índices impares (32, 128, 512, etc.) siguen ocupados que impiden la unión de los espacios libres. 
+
+**3. Consulta: ¿Cual es la diferencia entre el allocator de usuario (malloc/glibc) y el del kernel (buddy system, slab)? ¿Por que existen dos niveles de gestión de memoria?**
+
+|  | Allocator de Usuario | Allocator de Kernel |
+|----------------|-------------------------------------|------------------------------------|
+| Objetivo       | Gestionar peticiones pequeñas y frecuentes de aplicaciones. | Gestionar páginas de memoria física y estructuras del kernel. |
+| Unidad mínima  | Bytes (muy granular).               | Páginas (usualmente 4 KB).         |
+| Estrategia     | Mantiene "free lists" y optimiza para velocidad. | Buddy System (potencias de 2) y Slab (cachés de objetos fijos). |
+
+Existen dos niveles porque cada uno resuelve un problema diferente. El allocator de usuario administra memoria para un programa específico y el allocator del kernel administra los recursos físicos globales del sistema. 
+
+### 7. TLBs —Translation Lookaside Buffer
+
+Se creo el archivo tlb_locality.c
+
+```c
+// tlb_locality.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define N (1 << 22)  /* 4M enteros = 16 MB */
+
+double ms(struct timespec a, struct timespec b) {
+    return (b.tv_sec - a.tv_sec) * 1000.0
+         + (b.tv_nsec - a.tv_nsec) / 1e6;
+}
+
+int main() {
+    int *arr = (int *) malloc(N * sizeof(int));
+
+    if (arr == NULL) {
+        perror("malloc arr");
+        return 1;
+    }
+
+    for (int i = 0; i < N; i++) {
+        arr[i] = i;
+    }
+
+    struct timespec t0, t1;
+    long sum = 0;
+
+    /* Acceso SECUENCIAL --- alta localidad espacial */
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    for (int i = 0; i < N; i++) {
+        sum += arr[i];
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    printf("Secuencial : %8.2f ms (sum=%ld)\n", ms(t0, t1), sum);
+
+    /* Acceso ALEATORIO --- baja localidad */
+    int *idx = (int *) malloc(N * sizeof(int));
+
+    if (idx == NULL) {
+        perror("malloc idx");
+        free(arr);
+        return 1;
+    }
+
+    for (int i = 0; i < N; i++) {
+        idx[i] = i;
+    }
+
+    srand(42);
+
+    /* Fisher-Yates shuffle */
+    for (int i = N - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int t = idx[i];
+        idx[i] = idx[j];
+        idx[j] = t;
+    }
+
+    sum = 0;
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    for (int i = 0; i < N; i++) {
+        sum += arr[idx[i]];
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    printf("Aleatorio  : %8.2f ms (sum=%ld)\n", ms(t0, t1), sum);
+
+    free(arr);
+    free(idx);
+
+    return 0;
+}
+```
+
+#### 7.1 Localidad y TLB — Análisis
+
+**1. ¿Cuantas veces mas lento es el acceso aleatorio frente al secuencial? Muestre el promedio de 3 ejecuciones de tlb_locality.?**
+
+![texto](IMG/7-1.png)
+
+Basándonos en las 3 ejecuciones, realizamos los siguientes cálculos:
+
+| Ejecución | Secuencial (ms) | Aleatorio (ms) |
+|-----------|-----------------|----------------|
+| 1         | 3.40            | 43.67          |
+| 2         | 3.46            | 43.32          |
+| 3         | 3.45            | 47.53          |
+| Promedio  | **3.437 ms**    | **44.84 ms**   |
+
+El acceso aleatorio es aproximadamente 13 veces más lento (44.84/3.437 = 13.04) que el acceso secuencial.
+
+**2. Explique con el modelo del TLB porque el acceso aleatorio es mas lento. ¿Que ocurre con el hit rate en cada caso?**
+
+El TLB es un caché de hardware de alta velocidad que almacena las traducciones recientes de direcciones virtuales a físicas.
+
+- Acceso Secuencial: Presenta una alta localidad espacial. Como los datos están uno tras otro, una sola entrada en la TLB sirve para miles de accesos consecutivos. El hit rate es cercano al 100%.
+- Acceso Aleatorio: Presenta una nula localidad. Cada salto aleatorio probablemente cae en una página diferente que no está en la TLB. Esto provoca constantes TLB misses, obligando al hardware a realizar un "page table walk" (consultar la memoria principal), lo cual es órdenes de magnitud más lento. El hit rate cae drásticamente.
+
+**3. Si el tamaño de pagina fuera 64 KB en lugar de 4 KB, ¿mejoraria o empeoraría la situación con accesos aleatorios? Justifique desde el punto de vista del TLB y del uso de memoria.**
+
+Mejoraria, ya cada entrada de la TLB cubriría 16 veces más memoria 64 KB / 4 KB = 16. Incluso con accesos aleatorios, hay una mayor probabilidad de que dos accesos caigan en la misma "página gigante", reduciendo los misses.
+
+#### 7.2 Comportamiento de los TLB
+**1. Un TLB con 64 entradas (fully associative) y paginas de 4 KB. ¿Cuanta memoria puede cubrir sin generar misses? ¿Es suficiente para un proceso moderno tipico?**
+
+64 entradas x 4 KB/página = 256 KB. Para un proceso moderno, no es suficiente ya que 256 KB cubren apenas una fracción minúscula de sus datos
+
+**2. Consulte: ¿Que es un TLB shootdown y en que situación ocurre en sistemas multiprocesador? ¿Por que es una operación costosa?**
+
+TLB Shootdown es cuando un núcleo de CPU modifica una entrada en la tabla de páginas y debe notificar a todos los demás núcleos que sus copias locales de esa traducción en sus TLB ya no son válidas. Es costoso porque requiere Inter-Processor Interrupts (IPIs).
+
+**3. Explique la diferencia entre TLB gestionado por hardware (CISC/x86) y por software (RISC/MIPS). ¿Cual ofrece mayor flexibilidad al dise˜nador del SO y por que?**
+
+La gestión por hardware (CISC/x86) es más rápida pero rígida, mientras que la gestión por software (RISC/MIPS) es más flexible pero más lenta.
+
+El enfoque gestionado por software, ya que el diseñador del SO no está atado a una estructura de datos impuesta por el fabricante del chip. Esto permite experimentar con formatos de tabla de páginas más eficientes para cargas de trabajo específicas sin cambiar el hardware.
+
+## Conclusiones
