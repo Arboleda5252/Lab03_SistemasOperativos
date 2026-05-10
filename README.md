@@ -435,10 +435,10 @@ Offset: Como el tamaño de página es 4 KB = 2^(12) bytes, se necesitan 12 bits 
 
 VPN: Se obtiene restando los bits del offset al total del espacio virtual: VPN = Espacio virtual} - Offset
 
-**2. ¿Cuaantas entradas tiene la tabla de páginas de un proceso?**
+**2. ¿Cuantas entradas tiene la tabla de páginas de un proceso?**
 El número de entradas está determinado por la cantidad de páginas posibles, lo cual depende de los bits del VPN: Entradas = 2^{VPN bits}
 
-**3. ¿Cuanta memoria ocupa la tabla de paginas completa? ¿Es razonable ese tamaño para cada proceso?
+**3. ¿Cuanta memoria ocupa la tabla de paginas completa? ¿Es razonable ese tamaño para cada proceso?**
 
 Para hallar el tamaño total, multiplicamos el número de entradas por el tamaño de cada entrada (PTE):
 
@@ -654,7 +654,7 @@ y compilamos:
 
 ¿Son consecutivas? No estrictamente ya que las direcciones son crecientes, existe una diferencia mayor al tamaño solicitado entre cada puntero. Siendo su patrón de separación entre malloc(32) y malloc(64), la diferencia es de 0x30 ($48$ bytes).
 
-**2. ¿Tiene exito la asignación final de 1500 bytes? Explique el resultado en términos de fragmentación.?**
+**2. ¿Tiene exito la asignación final de 1500 bytes? Explique el resultado en términos de fragmentación.**
 
 Si, tuvo exito. Aunque se libero los índices pares (0, 2, 4, 6 y 8), la suma de esa memoria liberada ($16 + 64 + 256 + 1024 + 256 = 1616$ bytes) no está disponible como un único bloque contiguo. Los bloques de los índices impares (32, 128, 512, etc.) siguen ocupados que impiden la unión de los espacios libres. 
 
