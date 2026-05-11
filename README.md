@@ -5,9 +5,7 @@ Elaborado por:
 - Duván Antonio Arboleda Botero
   duvan.arboleda1@udea.edu.co
 
-Link de video: 
-
-Link de informe en pdf: 
+Link de video: https://youtu.be/6s55R2jDwNI
 
 ## Introducción
 En este laboratorio se estudia cómo los sistemas operativos administran la memoria. Se usan programas en C y herramientas de Linux como /proc, pmap y Valgrind.
